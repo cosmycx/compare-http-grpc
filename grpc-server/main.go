@@ -28,23 +28,49 @@ func main() {
 
 } // .main
 
+// used for client stream and one response, not stream response
 func (*server) Validate(stream ValidatePBService_ValidateServer) error {
 	fmt.Println("Validate invoked with streaming request ...")
-	result := ""
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
-			// finished reading the streaming client
-			return stream.SendAndClose(&ValidationPBResponse{
-				Result: result,
-			})
-		} // .if
+			return nil
+		}
 		if err != nil {
-			log.Fatalf("Error while reading client stream: %v", err)
+			log.Fatalf("Error reading stream: %v", err)
 			return err
 		}
+		participID := req.GetParticipID()
 
-		particip := req.GetParticipID()
-		result += "particip: " + particip + ", "
-	}
+		sErr := stream.Send(&ValidationPBResponse{
+			Result: "<--Report for particip: " + participID,
+		})
+
+		if sErr != nil {
+			log.Fatalf("Error while sending: %v", sErr)
+			return sErr
+		}
+	} // .for
 } // .Validate
+
+// // used for client stream and one response, not stream response
+// func (*server) Validate(stream ValidatePBService_ValidateServer) error {
+// 	fmt.Println("Validate invoked with streaming request ...")
+// 	result := ""
+// 	for {
+// 		req, err := stream.Recv()
+// 		if err == io.EOF {
+// 			// finished reading the streaming client
+// 			return stream.SendAndClose(&ValidationPBResponse{
+// 				Result: result,
+// 			})
+// 		} // .if
+// 		if err != nil {
+// 			log.Fatalf("Error while reading client stream: %v", err)
+// 			return err
+// 		}
+
+// 		particip := req.GetParticipID()
+// 		result += "particip: " + particip + ", "
+// 	} // .for
+// } // .Validate

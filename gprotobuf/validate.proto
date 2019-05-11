@@ -23,6 +23,6 @@ message ValidationPBResponse {
 } // .ValidationResponse
 
 service ValidatePBService{
-  rpc Validate(stream ValidationPBRequest) returns (ValidationPBResponse){};
+  rpc Validate(stream ValidationPBRequest) returns (stream ValidationPBResponse){};
 } // .ValidateService
 

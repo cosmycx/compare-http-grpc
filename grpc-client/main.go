@@ -3,6 +3,7 @@ package main
 import (
 	context "context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -39,50 +40,115 @@ func main() {
 
 } // .main
 
-func (s *server) doClientStreaming(participants map[string][]map[int][]string) {
-	fmt.Println("Starting streaming participants ... ")
+func (s *server) doBiDiStreaming(participants map[string][]map[int][]string) {
+	fmt.Println("Starting a Client streaming RPC...")
 
 	stream, err := s.grpcClient.Validate(context.Background())
 	if err != nil {
-		log.Fatalf("error while calling Validation: %v", err)
+		log.Fatalf("error while calling Validate: %v", err)
 	}
 
-	for participID, dataRows := range participants {
+	waitchan := make(chan struct{})
 
-		var rows []*Row
+	// send to server | go routines
+	go func() {
+		for participID, dataRows := range participants {
 
-		for _, oneRow := range dataRows {
-			var row *Row
+			var rows []*Row
 
-			for k, v := range oneRow {
-				row = &Row{
-					RowNo: int64(k),
-					RowData: &RowData{
-						Field: v,
-					},
-				} // .row
+			for _, oneRow := range dataRows {
+				var row *Row
+
+				for k, v := range oneRow {
+					row = &Row{
+						RowNo: int64(k),
+						RowData: &RowData{
+							Field: v,
+						},
+					} // .row
+				} // .for
+
+				rows = append(rows, row)
 			} // .for
 
-			rows = append(rows, row)
+			oneParticip := &ValidationPBRequest{
+				ParticipID: participID,
+				Datarows:   rows,
+			} // .oneParticip
+
+			log.Printf("-->Sending req for participID: %v\n", participID)
+			stream.Send(oneParticip)
+			//time.Sleep(5 * time.Millisecond)
+
 		} // .for
+		stream.CloseSend()
+	}() // .go.func
 
-		oneParticip := &ValidationPBRequest{
-			ParticipID: participID,
-			Datarows:   rows,
-		} // .oneParticip
+	// receive messages from server
+	go func() {
+		for {
+			res, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Fatalf("Error while receiving: %v", err)
+				break
+			}
+			log.Printf("Received: %v\n", res.GetResult())
+		} // .for
+		close(waitchan)
+	}() // .go.func
 
-		//log.Printf("Sending req for participID: %v\n", participID)
-		stream.Send(oneParticip)
-		//time.Sleep(5 * time.Millisecond)
+	// wait for all done
+	<-waitchan
+} // .doBiDiStreaming
 
-	} // .for
+// used for client stream and one response, not stream response
+// func (s *server) doClientStreaming(participants map[string][]map[int][]string) {
+// 	fmt.Println("Starting streaming participants ... ")
 
-	_, err = stream.CloseAndRecv()
-	if err != nil {
-		log.Fatalf("error while receiving response from LongGreet: %v", err)
-	}
-	//log.Printf("Validation Response: %v\n", res)
-} // .doClientStreaming
+// 	stream, err := s.grpcClient.Validate(context.Background())
+// 	if err != nil {
+// 		log.Fatalf("error while calling Validate: %v", err)
+// 	}
+
+// 	for participID, dataRows := range participants {
+
+// 		var rows []*Row
+
+// 		for _, oneRow := range dataRows {
+// 			var row *Row
+
+// 			for k, v := range oneRow {
+// 				row = &Row{
+// 					RowNo: int64(k),
+// 					RowData: &RowData{
+// 						Field: v,
+// 					},
+// 				} // .row
+// 			} // .for
+
+// 			rows = append(rows, row)
+// 		} // .for
+
+// 		oneParticip := &ValidationPBRequest{
+// 			ParticipID: participID,
+// 			Datarows:   rows,
+// 		} // .oneParticip
+
+// 		//log.Printf("Sending req for participID: %v\n", participID)
+// 		stream.Send(oneParticip)
+// 		//time.Sleep(5 * time.Millisecond)
+
+// 	} // .for
+
+// 	_, err = stream.CloseAndRecv()
+// 	if err != nil {
+// 		log.Fatalf("error while receiving response from LongGreet: %v", err)
+// 	}
+// 	//log.Printf("Validation Response: %v\n", res)
+// } // .doClientStreaming
 
 func (s *server) validate(w http.ResponseWriter, r *http.Request) {
 
@@ -116,7 +182,7 @@ func (s *server) validate(w http.ResponseWriter, r *http.Request) {
 	// --------------------------------------------------------------
 	start = time.Now()
 	// sending to server GRPC service
-	s.doClientStreaming(data)
+	s.doBiDiStreaming(data)
 
 	serverRespDur := time.Since(start)
 	log.Printf("response duration: %v\n", serverRespDur)
