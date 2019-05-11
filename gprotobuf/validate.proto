@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package main;
+option go_package="main";
+
+message RowData {
+  repeated string field = 1;
+}// .RowData
+
+message Row {
+  int64 rowNo = 1;
+  RowData rowData = 2;
+}// .Row
+
+message ValidationPBRequest {
+  string participID = 1;
+  repeated Row datarows = 2;
+}// .Particip
+
+
+message ValidationPBResponse {
+  string result = 1;
+} // .ValidationResponse
+
+service ValidatePBService{
+  rpc Validate(stream ValidationPBRequest) returns (ValidationPBResponse){};
+} // .ValidateService
+
